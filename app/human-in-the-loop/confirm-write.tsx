@@ -204,11 +204,18 @@ async function resumeOrShowFailure(
   action: string,
   confirmed: boolean,
   interruptId: string,
+  by: string | undefined,
 ): Promise<void> {
   try {
     // A newer turn may pause while updating the receipt. A scalar resume would
     // answer that newer interrupt; LangGraph's ID map only answers this one.
-    await thread.resume({ [interruptId]: { confirmed } });
+    //
+    // `by` names who answered, as the Channel resolved them. OpenBot decides an
+    // approval only as the person it names and refuses an answer without it;
+    // the bundled agent reads `confirmed` alone and ignores it.
+    await thread.resume({
+      [interruptId]: by ? { confirmed, by } : { confirmed },
+    });
   } catch (error) {
     try {
       await thread.update(
@@ -617,7 +624,14 @@ function renderConfirmWrite(
         recovery: "resumed_the_agent_anyway",
       });
     }
-    await resumeOrShowFailure(thread, message.ref, action, confirmed, interruptId);
+    await resumeOrShowFailure(
+      thread,
+      message.ref,
+      action,
+      confirmed,
+      interruptId,
+      interaction.user?.id,
+    );
   };
 
   return (

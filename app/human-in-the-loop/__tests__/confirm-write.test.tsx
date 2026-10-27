@@ -395,6 +395,26 @@ describe("ConfirmWrite", () => {
     expect(context?.elements[0]?.text).toContain("Approved");
   });
 
+  it("names who answered when the Channel resolved the clicker", async () => {
+    const ir = renderToIR(<ConfirmWrite action="Create Linear comment" />);
+    const resume = vi.fn(async () => ({ id: "m2" }));
+    const ctx = {
+      user: { id: "slack:T1:U1", name: "Ken" },
+      thread: {
+        conversationKey: "unit-thread",
+        update: vi.fn(async () => ({ id: "m1" })),
+        resume,
+      },
+      message: { ref: { id: "m1" } },
+    } as unknown as InteractionContext;
+
+    await (buttonByText(ir, "Cancel").props.onClick as ClickHandler)(ctx);
+
+    expect(resume).toHaveBeenCalledWith({
+      [INTERRUPT_ID]: { confirmed: false, by: "slack:T1:U1" },
+    });
+  });
+
   it("the approved card does not claim a write that may still fail", async () => {
     const ir = renderToIR(<ConfirmWrite action="Save project" />);
     const save = buttonByText(ir, "Save");
