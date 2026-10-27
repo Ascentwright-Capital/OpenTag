@@ -89,6 +89,17 @@ async function runtime(store: MemoryStore, steps: Step[], legacy = false) {
 }
 
 describe("approval decisions through the SDK", () => {
+  it("says who answered, as the Channel's own user id", async () => {
+    const current = await runtime(new MemoryStore(), [interrupt]);
+    await current.turn();
+    const id = interruptSequence.toString(16).padStart(32, "0");
+    const [approve] = buttons(current.adapter.posted[0]!);
+    await current.click(approve!);
+    const answer = current.agent.calls[1]?.forwardedProps?.command?.resume?.[id];
+    expect(answer).toMatchObject({ confirmed: true });
+    expect(answer.by).toMatch(/^slack:.+:alice$/);
+  });
+
   it("targets the original interrupt when a newer turn pauses during the old card's update", async () => {
     const current = await runtime(new MemoryStore(), [interrupt, interrupt]);
     await current.turn();
