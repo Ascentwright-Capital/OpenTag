@@ -356,7 +356,8 @@ export OPENBOT_SLACK_BOT_TOKEN=xoxb-...
 ```
 
 It is the **Bot User OAuth Token** on the Slack app's **OAuth & Permissions**
-page. The app needs `chat:write` to post, `chat:write.customize` to post under
+page. The app needs `chat:write` to post, `im:write` to open the person's direct
+message with the app, `chat:write.customize` to post under
 each Bot's own name (without it, messages go out under the app's name), and
 `channels:read` plus `groups:read` for membership checks. Add any missing
 scope there and reinstall the app. A delivery OpenBot retries under the same
