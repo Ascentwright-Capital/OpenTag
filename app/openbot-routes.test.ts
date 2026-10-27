@@ -92,7 +92,10 @@ describe("OpenBot routes", () => {
   });
 
   it("posts a delivery as the Bot and answers with where it landed", async () => {
-    const slack = fakeSlack([{ ok: true, ts: "1730000000.000100", channel: "D0ABCDEFGH" }]);
+    const slack = fakeSlack([
+      { ok: true, channel: { id: "D0ABCDEFGH" } },
+      { ok: true, ts: "1730000000.000100", channel: "D0ABCDEFGH" },
+    ]);
     const call = await serve({ authHeader: AUTH, slackBotToken: "xoxb-1", fetchImpl: slack.fetchImpl });
     const response = await call(DELIVER_PATH, {
       ...delivery,
@@ -101,10 +104,11 @@ describe("OpenBot routes", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, id: "1730000000.000100", channel: "D0ABCDEFGH" });
     expect(slack.calls).toEqual([
+      { method: "conversations.open", body: { users: "U012ABCDEF" } },
       {
         method: "chat.postMessage",
         body: {
-          channel: "U012ABCDEF",
+          channel: "D0ABCDEFGH",
           markdown_text: delivery.text,
           unfurl_links: false,
           username: "Analytics",
@@ -115,31 +119,48 @@ describe("OpenBot routes", () => {
   });
 
   it("answers a retried delivery without posting it twice", async () => {
-    const slack = fakeSlack([{ ok: true, ts: "1.2", channel: "D0ABCDEFGH" }]);
+    const slack = fakeSlack([
+      { ok: true, channel: { id: "D0ABCDEFGH" } },
+      { ok: true, ts: "1.2", channel: "D0ABCDEFGH" },
+    ]);
     const call = await serve({ authHeader: AUTH, slackBotToken: "xoxb-1", fetchImpl: slack.fetchImpl });
     await call(DELIVER_PATH, delivery);
     const again = await call(DELIVER_PATH, delivery);
     expect(await again.json()).toEqual({ ok: true, id: "1.2", channel: "D0ABCDEFGH" });
-    expect(slack.calls).toHaveLength(1);
+    expect(slack.calls).toHaveLength(2);
   });
 
   it("posts under the app's name when the Bot's name needs a missing scope", async () => {
     const slack = fakeSlack([{ ok: false, error: "missing_scope" }, { ok: true, ts: "1.3" }]);
     const call = await serve({ authHeader: AUTH, slackBotToken: "xoxb-1", fetchImpl: slack.fetchImpl });
-    const response = await call(DELIVER_PATH, { ...delivery, sender: { name: "Analytics" } });
+    const response = await call(DELIVER_PATH, {
+      ...delivery,
+      address: "C0ABCDEFGH",
+      sender: { name: "Analytics" },
+    });
     expect(response.status).toBe(200);
     expect(slack.calls[1]?.body).not.toHaveProperty("username");
   });
 
   it("passes Slack's refusal on, retryable only when Slack is at fault", async () => {
     const slack = fakeSlack([{ ok: false, error: "channel_not_found" }, 429]);
+    const inChannel = { ...delivery, address: "C0ABCDEFGH" };
     const call = await serve({ authHeader: AUTH, slackBotToken: "xoxb-1", fetchImpl: slack.fetchImpl });
-    const refused = await call(DELIVER_PATH, delivery);
+    const refused = await call(DELIVER_PATH, inChannel);
     expect(refused.status).toBe(422);
     expect(await refused.json()).toEqual({ error: "channel_not_found" });
-    const limited = await call(DELIVER_PATH, { ...delivery, id: "other" });
+    const limited = await call(DELIVER_PATH, { ...inChannel, id: "other" });
     expect(limited.status).toBe(503);
     expect(await limited.json()).toEqual({ error: "ratelimited" });
+  });
+
+  it("needs im:write to reach a person's direct message", async () => {
+    const slack = fakeSlack([{ ok: false, error: "missing_scope" }]);
+    const call = await serve({ authHeader: AUTH, slackBotToken: "xoxb-1", fetchImpl: slack.fetchImpl });
+    const response = await call(DELIVER_PATH, delivery);
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "missing_scope" });
+    expect(slack.calls.map((c) => c.method)).toEqual(["conversations.open"]);
   });
 
   it("refuses Teams and malformed deliveries", async () => {

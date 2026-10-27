@@ -156,6 +156,21 @@ export function createOpenbotRoutes(options: OpenbotRoutesOptions) {
     }
   }
 
+  /**
+   * Where a message to `address` goes. A user id is opened as the person's
+   * direct message with the app (`im:write`): posted to the bare user id,
+   * Slack files the message under its own "Slack" notifications conversation,
+   * where the person cannot answer. Conversation ids pass through.
+   */
+  async function conversationFor(address: string): Promise<string> {
+    if (!/^[UW]/.test(address)) return address;
+    const answer = await slack("conversations.open", { users: address });
+    const opened = isRecord(answer.channel) ? answer.channel.id : undefined;
+    if (typeof opened !== "string" || !opened)
+      throw new SlackCallError("slack_invalid_response", true);
+    return opened;
+  }
+
   async function deliver(payload: unknown, response: ServerResponse) {
     if (
       !isRecord(payload) ||
@@ -179,10 +194,15 @@ export function createOpenbotRoutes(options: OpenbotRoutesOptions) {
       boundedString(sender?.iconUrl, 2048) && sender.iconUrl.startsWith("https://")
         ? sender.iconUrl
         : undefined;
+    let channel: string;
+    try {
+      channel = await conversationFor(payload.address);
+    } catch (error) {
+      return failed(error, response);
+    }
     const text = payload.text;
     const message: Record<string, unknown> = {
-      // A user id posts into that person's direct message with the app.
-      channel: payload.address,
+      channel,
       ...(text.length <= MARKDOWN_TEXT_LIMIT
         ? { markdown_text: text }
         : { text }),
