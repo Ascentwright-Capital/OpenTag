@@ -6,6 +6,7 @@ ENV PATH=$PNPM_HOME:$PATH
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
+COPY patches patches
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile
 COPY tsconfig.json ./
@@ -20,6 +21,7 @@ ENV PATH=$PNPM_HOME:$PATH
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
+COPY patches patches
 RUN --mount=type=cache,id=pnpm-prod,target=/pnpm/store \
     pnpm install --prod --frozen-lockfile
 

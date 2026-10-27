@@ -30,6 +30,13 @@ export interface AppEnvironment {
    * structured `openbot.sender` entry OpenBot requires (`OPENBOT_PAIRING`).
    */
   openbotPairing?: boolean;
+  /**
+   * The Slack app's bot token, for what OpenBot sends outside a live turn
+   * (`/openbot/deliver`) and its channel-membership checks
+   * (`OPENBOT_SLACK_BOT_TOKEN`). Read only when paired: named apart from the
+   * retired direct-mode `SLACK_BOT_TOKEN` so a leftover never turns it on.
+   */
+  openbotSlackBotToken?: string;
 }
 
 /**
@@ -85,6 +92,7 @@ export function parsePort(
 export function readEnvironment(
   env: NodeJS.ProcessEnv = process.env,
 ): AppEnvironment {
+  const openbotPairing = readFlag(env, "OPENBOT_PAIRING");
   return {
     agentDisplayName:
       env.AGENT_DISPLAY_NAME?.trim() || DEFAULT_AGENT_DISPLAY_NAME,
@@ -116,6 +124,9 @@ export function readEnvironment(
     // default every other variable here falls back to.
     port: parsePort(env.PORT?.trim() || undefined),
     publicUrl: readPublicUrl(env),
-    openbotPairing: readFlag(env, "OPENBOT_PAIRING"),
+    openbotPairing,
+    openbotSlackBotToken: openbotPairing
+      ? env.OPENBOT_SLACK_BOT_TOKEN?.trim() || undefined
+      : undefined,
   };
 }

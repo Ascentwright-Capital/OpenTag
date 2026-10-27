@@ -223,6 +223,7 @@ describe("readEnvironment", () => {
       "intelligenceGatewayWsUrl",
       "learningContainerId",
       "openbotPairing",
+      "openbotSlackBotToken",
       "port",
       "publicUrl",
     ]);
