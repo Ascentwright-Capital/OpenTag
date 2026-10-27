@@ -10,6 +10,7 @@ import {
   handleArcadeBrowserRequest,
 } from "./arcade-browser-routes.js";
 import type { AppEnvironment } from "./env.js";
+import { createOpenbotRoutes } from "./openbot-routes.js";
 
 export const OPENTAG_SERVICE_USER = {
   id: "opentag-service",
@@ -59,6 +60,14 @@ export function createOpenTagRuntime(options: {
     agentAuthHeader: options.environment.agentAuthHeader,
   });
 
+  // Only when paired: unpaired, these paths fall through like any other.
+  const openbotRoutes = options.environment.openbotPairing
+    ? createOpenbotRoutes({
+        authHeader: options.environment.agentAuthHeader,
+        slackBotToken: options.environment.openbotSlackBotToken,
+      })
+    : undefined;
+
   /**
    * The Arcade connect pages sit in front of the Copilot listener.
    *
@@ -71,7 +80,9 @@ export function createOpenTagRuntime(options: {
    * Everything this does not recognise falls through untouched.
    */
   const wrapped: RequestListener = (request, response) => {
-    void handleArcadeBrowserRequest(request, response, arcadeClient).then(
+    void (async () =>
+      (openbotRoutes ? await openbotRoutes(request, response) : false) ||
+      handleArcadeBrowserRequest(request, response, arcadeClient))().then(
       (handled) => {
         if (!handled) copilotListener(request, response);
       },

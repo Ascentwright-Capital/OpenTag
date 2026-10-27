@@ -1,0 +1,30 @@
+diff --git a/dist/delivery-adapter.js b/dist/delivery-adapter.js
+index c89e1d52e36e376bd4f35acbb7fa9223e4967488..74afa68862a1ef03215b141f17ed49afea301fb4 100644
+--- a/dist/delivery-adapter.js
++++ b/dist/delivery-adapter.js
+@@ -245,10 +245,21 @@ export class DeliveryAdapter {
+             identityContext: {
+                 tenant: delivery.tenant ?? { id: "unknown" },
+                 installation: delivery.installation ?? { id: "unknown" },
+-                conversation: delivery.conversation ?? {
+-                    id: delivery.canonicalThreadId,
+-                    kind: "thread",
+-                },
++                // Patched (OpenTag for OpenBot): a direct message is told apart by
++                // the delivery's surface kind when the conversation carries no kind.
++                conversation: delivery.conversation
++                    ? delivery.conversation.kind === undefined &&
++                        (delivery.surfaceKind === "direct_message" ||
++                            delivery.surfaceKind === "personal")
++                        ? { ...delivery.conversation, kind: delivery.surfaceKind }
++                        : delivery.conversation
++                    : {
++                        id: delivery.canonicalThreadId,
++                        kind: delivery.surfaceKind === "direct_message" ||
++                            delivery.surfaceKind === "personal"
++                            ? delivery.surfaceKind
++                            : "thread",
++                    },
+                 trigger: input.kind === "text" ? "message" : input.kind,
+                 event: {
+                     id: delivery.turn.eventId,

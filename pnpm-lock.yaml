@@ -7,6 +7,11 @@ settings:
 overrides:
   rxjs: ^7.8.2
 
+patchedDependencies:
+  '@copilotkit/channels-intelligence@0.9.2':
+    hash: d52833bc4227b22c6e01cfea7b6858c5820f648a39cc4d5fe2d9f7a07e2cbbb2
+    path: patches/@copilotkit__channels-intelligence@0.9.2.patch
+
 importers:
 
   .:
@@ -2642,7 +2647,7 @@ snapshots:
       - utf-8-validate
       - vitest
 
-  '@copilotkit/channels-intelligence@0.9.2(@ag-ui/core@0.0.59)(@opentelemetry/api@1.9.1)(@types/express@4.17.25)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.23.1)))(zod@3.25.76)':
+  '@copilotkit/channels-intelligence@0.9.2(patch_hash=d52833bc4227b22c6e01cfea7b6858c5820f648a39cc4d5fe2d9f7a07e2cbbb2)(@ag-ui/core@0.0.59)(@opentelemetry/api@1.9.1)(@types/express@4.17.25)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.23.1)))(zod@3.25.76)':
     dependencies:
       '@ag-ui/client': 0.0.59
       '@copilotkit/channels-core': 0.9.2(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.23.1)))(zod@3.25.76)
@@ -2814,7 +2819,7 @@ snapshots:
       '@ai-sdk/mcp': 1.0.62(zod@3.25.76)
       '@ai-sdk/openai': 3.0.85(zod@3.25.76)
       '@copilotkit/channels-core': 0.9.2(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.23.1)))(zod@3.25.76)
-      '@copilotkit/channels-intelligence': 0.9.2(@ag-ui/core@0.0.59)(@opentelemetry/api@1.9.1)(@types/express@4.17.25)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.23.1)))(zod@3.25.76)
+      '@copilotkit/channels-intelligence': 0.9.2(patch_hash=d52833bc4227b22c6e01cfea7b6858c5820f648a39cc4d5fe2d9f7a07e2cbbb2)(@ag-ui/core@0.0.59)(@opentelemetry/api@1.9.1)(@types/express@4.17.25)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.23.1)))(zod@3.25.76)
       '@copilotkit/license-verifier': 0.5.0
       '@copilotkit/shared': 1.70.1(@ag-ui/core@0.0.59)
       '@graphql-yoga/plugin-defer-stream': 3.21.2(graphql-yoga@5.21.2(graphql@16.14.2))(graphql@16.14.2)

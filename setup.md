@@ -160,6 +160,7 @@ The AG-UI endpoint is `http://localhost:8123/`; `/health` reports the
 | `AGENT_AUTH_HEADER` | No | Shared secret between runtime and agent. Sent as `Authorization`; the agent checks it when set to a non-empty value, and **requires** a non-empty one before minting a Composio or Arcade connect link |
 | `PUBLIC_URL` | For personal Arcade only | Where a browser can reach this service. Falls back to `RAILWAY_PUBLIC_DOMAIN`. Composio deployments and shared-only Arcade need none |
 | `OPENBOT_PAIRING` | No | `true` when `AGENT_URL` points at OpenBot. Adds the structured `openbot.sender` context entry OpenBot requires on every turn; see [Pairing with OpenBot](#pairing-with-openbot). Defaults to `false` |
+| `OPENBOT_SLACK_BOT_TOKEN` | When paired | The Slack app's bot token (`xoxb-`), for OpenBot's proactive sends and membership checks. Read only when `OPENBOT_PAIRING` is on |
 | `PORT` | No | Channel HTTP port; defaults to `3000` |
 | `LOG_LEVEL` | No | Defaults to `error`. Channel lifecycle breadcrumbs are emitted at `warn`, so set `warn` or lower to see them |
 | `MERMAID_URL` | No | Overrides the Mermaid browser bundle URL used by diagram rendering |
@@ -336,9 +337,36 @@ and an answer that may draw on someone's private context is only posted there.
 A person links their Slack account from their Bot's page in OpenBot, which
 shows a one-time `link <code>` message to send to this app in a direct message.
 
-Not yet implemented here: OpenBot's proactive sends (`POST /openbot/deliver`)
-and channel-membership checks (`POST /openbot/membership`). Until they are,
-replies OpenBot routes outside the live turn, and Slack triggers, do not work.
+A managed Channel can only post inside a live delivery, so what OpenBot sends
+on its own (a reply after an approval, a Bot's question, a routine result, any
+answer it keeps out of a shared conversation) goes through two routes on this
+runtime, which post with the Slack app's own bot token:
+
+| Route | Body | Answer |
+| --- | --- | --- |
+| `POST /openbot/deliver` | `{ id, platform, address, text, sender? }` | `{ ok: true, id: <ts>, channel }` |
+| `POST /openbot/membership` | `{ teamId, slackUserId, channelId }` | `{ member: boolean }` |
+
+Both require `Authorization` to equal `AGENT_AUTH_HEADER`, and stay shut
+without one. Set OpenBot's `OPENTAG_URL` to this runtime's address, and give the
+runtime the token:
+
+```bash
+export OPENBOT_SLACK_BOT_TOKEN=xoxb-...
+```
+
+It is the **Bot User OAuth Token** on the Slack app's **OAuth & Permissions**
+page. The app needs `chat:write` to post, `chat:write.customize` to post under
+each Bot's own name (without it, messages go out under the app's name), and
+`channels:read` plus `groups:read` for membership checks. Add any missing
+scope there and reinstall the app. A delivery OpenBot retries under the same
+`id` is answered from memory for a day rather than posted twice. Teams is not
+supported by these routes yet.
+
+The conversation's `kind` comes from Intelligence. When it carries none, this
+repository's patch of `@copilotkit/channels-intelligence`
+(`patches/`) takes it from the delivery's surface kind, so a Slack direct
+message reaches OpenBot as `direct_message` rather than as a shared thread.
 
 ## Optional sources
 
