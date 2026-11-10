@@ -1,0 +1,9 @@
+# The agent-harness submodule at .agents/shared: a pull request whenever it moves.
+version: 2
+updates:
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "[Chore]"

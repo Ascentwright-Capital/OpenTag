@@ -1,0 +1,3 @@
+[submodule ".agents/shared"]
+	path = .agents/shared
+	url = https://github.com/Ascentwright-Capital/agent-harness

@@ -1,5 +1,7 @@
 # Agent instructions
 
+> **Ascentwright fork.** Shared Ascentwright rules live in [`.agents/shared/`](.agents/shared/README.md), the `agent-harness` submodule. If that folder is empty, run `git submodule update --init` first. This file and upstream's docs win where the two differ. Our changes live on `openbot-pairing`.
+
 OpenTag is meant to be cloned and customized, often with a coding agent driving.
 This file tells that agent where the authority lives, so it grounds work in the
 current API instead of in recalled patterns.
