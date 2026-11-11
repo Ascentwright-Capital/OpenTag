@@ -221,6 +221,7 @@ function makeChannel(
     agent?: FakeAgent;
     agentDisplayName?: string;
     openbotPairing?: boolean;
+    trustedAppSenders?: ReadonlySet<string>;
   } = {},
 ) {
   const adapter = new FakeAdapter({ platform: "intelligence" });
@@ -231,7 +232,10 @@ function makeChannel(
     "opentag",
     agent,
     options.agentDisplayName,
-    { openbotPairing: options.openbotPairing },
+    {
+      openbotPairing: options.openbotPairing,
+      trustedAppSenders: options.trustedAppSenders,
+    },
   );
   channel.ɵruntime.addAdapter(adapter);
   channels.push(channel);
@@ -605,6 +609,66 @@ describe("createOpenTagChannel", () => {
       expect((agent as CapturingAgent).calls).toHaveLength(1);
     },
   );
+
+  // A person's own account posting through an app (Slack's "Sent using …")
+  // arrives as `app`. It is answered only when the operator listed the account.
+  describe("app posts from a trusted account", () => {
+    const appMention = (id: string, kind: "app" | "bot", n: number) => ({
+      conversationKey: `app-post-${n}`,
+      replyTarget: {},
+      userText: "@Kite list the open launch issues",
+      platform: "slack",
+      actor: { id, kind },
+      operation: {
+        kind: "created" as const,
+        logicalMessageId: `a${n}`,
+        revisionId: `a${n}`,
+        mentioned: true,
+      },
+    });
+
+    it("answers a mention an app posted for a listed account", async () => {
+      const { adapter, agent, channel } = makeChannel({
+        trustedAppSenders: new Set(["U0CD7JBKWP2"]),
+      });
+
+      await channel.ɵruntime.start();
+      await adapter.getSink().onTurn(appMention("U0CD7JBKWP2", "app", 1));
+
+      expect((agent as CapturingAgent).calls).toHaveLength(1);
+    });
+
+    it("still ignores an app post from an account nobody listed", async () => {
+      const { adapter, agent, channel } = makeChannel({
+        trustedAppSenders: new Set(["U0CD7JBKWP2"]),
+      });
+
+      await channel.ɵruntime.start();
+      await adapter.getSink().onTurn(appMention("U9OTHER", "app", 2));
+
+      expect((agent as CapturingAgent).calls).toHaveLength(0);
+    });
+
+    it("still ignores a bot, even one whose id is listed", async () => {
+      const { adapter, agent, channel } = makeChannel({
+        trustedAppSenders: new Set(["U0CD7JBKWP2"]),
+      });
+
+      await channel.ɵruntime.start();
+      await adapter.getSink().onTurn(appMention("U0CD7JBKWP2", "bot", 3));
+
+      expect((agent as CapturingAgent).calls).toHaveLength(0);
+    });
+
+    it("ignores every app post when no account is listed", async () => {
+      const { adapter, agent, channel } = makeChannel();
+
+      await channel.ɵruntime.start();
+      await adapter.getSink().onTurn(appMention("U0CD7JBKWP2", "app", 4));
+
+      expect((agent as CapturingAgent).calls).toHaveLength(0);
+    });
+  });
 
   it("ignores an unmentioned turn in an unsubscribed thread", async () => {
     const { adapter, agent, channel } = makeChannel();

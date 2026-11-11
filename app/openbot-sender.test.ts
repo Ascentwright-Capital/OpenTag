@@ -49,6 +49,29 @@ describe("createTurnConversations", () => {
     ).toEqual({ id: "slack:T0123:U2", name: "U2" });
   });
 
+  it("names a listed account posting through an app as it names a person", async () => {
+    const turns = createTurnConversations(undefined, new Set(["U42"]));
+    expect(
+      await turns.identifyUser(
+        identity({ actor: { id: "U42", kind: "app", name: "ascentwright" } }),
+      ),
+    ).toEqual({ id: "slack:T0123:U42", name: "ascentwright" });
+  });
+
+  it("names nobody for an app post from an unlisted account, or a listed bot", async () => {
+    const turns = createTurnConversations(undefined, new Set(["U42"]));
+    expect(
+      await turns.identifyUser(
+        identity({ actor: { id: "U9", kind: "app", name: "Someone" } }),
+      ),
+    ).toBeNull();
+    expect(
+      await turns.identifyUser(
+        identity({ actor: { id: "U42", kind: "bot", name: "A bot" } }),
+      ),
+    ).toBeNull();
+  });
+
   it("names nobody for anything that is not a person", async () => {
     const turns = createTurnConversations();
     expect(
