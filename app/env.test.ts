@@ -183,6 +183,24 @@ describe("readEnvironment", () => {
     });
   });
 
+  it("reads OPENTAG_TRUSTED_APP_SENDERS, and trusts nobody without it", () => {
+    expect([...(readEnvironment(requiredEnvironment).trustedAppSenders ?? [])]).toEqual(
+      [],
+    );
+    expect([
+      ...(readEnvironment({
+        ...requiredEnvironment,
+        OPENTAG_TRUSTED_APP_SENDERS: "U0CD7JBKWP2",
+      }).trustedAppSenders ?? []),
+    ]).toEqual(["U0CD7JBKWP2"]);
+    expect(() =>
+      readEnvironment({
+        ...requiredEnvironment,
+        OPENTAG_TRUSTED_APP_SENDERS: "ascentwright",
+      }),
+    ).toThrow(/OPENTAG_TRUSTED_APP_SENDERS/);
+  });
+
   it("reads PORT, the port the process is told to listen on", () => {
     // `parsePort` is exercised directly below, but nothing passed `PORT`
     // through `readEnvironment` itself: renaming the key it reads left all 29
@@ -226,6 +244,7 @@ describe("readEnvironment", () => {
       "openbotSlackBotToken",
       "port",
       "publicUrl",
+      "trustedAppSenders",
     ]);
     // Nothing carried the values through under a different shape either.
     expect(JSON.stringify(environment)).not.toContain("xoxb-unused");

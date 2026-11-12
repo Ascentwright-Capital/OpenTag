@@ -5,6 +5,10 @@ import type {
   ContextEntry,
   IncomingMessage,
 } from "@copilotkit/channels";
+import {
+  NO_TRUSTED_APP_SENDERS,
+  speaksForAPerson,
+} from "./trusted-senders.js";
 
 /**
  * The context entry OpenBot reads to learn who a turn is from, when OpenBot is
@@ -32,8 +36,14 @@ type TurnConversation = { id: string; kind?: string };
  * conversation under the turn's event id for the handler to take. Turns the
  * handler drops (a bot, an edit) are never taken, so the oldest are forgotten
  * past `limit`.
+ *
+ * `trustedAppSenders` names accounts whose `app`-posted messages speak for
+ * them (`OPENTAG_TRUSTED_APP_SENDERS`). Without it, only a `human` is named.
  */
-export function createTurnConversations(limit = 1_000) {
+export function createTurnConversations(
+  limit = 1_000,
+  trustedAppSenders: ReadonlySet<string> = NO_TRUSTED_APP_SENDERS,
+) {
   const conversations = new Map<string, TurnConversation>();
 
   return {
@@ -50,9 +60,11 @@ export function createTurnConversations(limit = 1_000) {
           conversations.delete(oldest);
         }
       }
-      // The `"platform"` strategy, unchanged: OpenTag's per-person identity and
-      // OpenBot's identity links are both keyed on this id.
-      if (context.actor.kind !== "human") return null;
+      // The `"platform"` strategy: OpenTag's per-person identity and OpenBot's
+      // identity links are both keyed on this id. A trusted account posting
+      // through an app is named exactly as when it types, so it reaches the
+      // same OpenBot link.
+      if (!speaksForAPerson(context.actor, trustedAppSenders)) return null;
       return {
         id: [context.provider, context.tenant.id, context.actor.id].join(":"),
         name: context.actor.name ?? context.actor.handle ?? context.actor.id,

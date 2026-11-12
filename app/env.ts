@@ -1,3 +1,5 @@
+import { parseTrustedAppSenders } from "./trusted-senders.js";
+
 export const DEFAULT_INTELLIGENCE_API_URL =
   "https://api.intelligence.copilotkit.ai";
 export const DEFAULT_INTELLIGENCE_GATEWAY_WS_URL =
@@ -37,6 +39,12 @@ export interface AppEnvironment {
    * retired direct-mode `SLACK_BOT_TOKEN` so a leftover never turns it on.
    */
   openbotSlackBotToken?: string;
+  /**
+   * Slack user ids whose posts through an app (Slack's "Sent using …") count
+   * as that person asking (`OPENTAG_TRUSTED_APP_SENDERS`, comma-separated).
+   * Empty by default, so only messages a person typed reach the agent.
+   */
+  trustedAppSenders?: ReadonlySet<string>;
 }
 
 /**
@@ -128,5 +136,6 @@ export function readEnvironment(
     openbotSlackBotToken: openbotPairing
       ? env.OPENBOT_SLACK_BOT_TOKEN?.trim() || undefined
       : undefined,
+    trustedAppSenders: parseTrustedAppSenders(env.OPENTAG_TRUSTED_APP_SENDERS),
   };
 }

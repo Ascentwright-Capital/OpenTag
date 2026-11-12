@@ -30,6 +30,10 @@ import {
 import { FILE_ISSUE_CALLBACK, fileIssueSubmit } from "./modals/file-issue.js";
 import { IncidentCard } from "./tools/showcase-tools.js";
 import { RenderChart } from "./tools/render-chart.js";
+import {
+  NO_TRUSTED_APP_SENDERS,
+  speaksForAPerson,
+} from "./trusted-senders.js";
 import { createAppTools } from "./tools/index.js";
 import {
   subscribeThreadTool,
@@ -44,20 +48,28 @@ type ChannelAgent = NonNullable<CreateChannelOptions["agent"]>;
  * `ProviderActor.kind` is the provider's own word for what sent a message, and
  * the Channels SDK documents it as untrusted metadata rather than
  * authorization — which is why it is read here as a filter and never as a
- * grant. `human` and nothing else, the same set the agent's
- * `composio_tools.state.PERSONAL_KINDS` admits, so both ends of the wire agree
- * about who is speaking: `bot` and `app` are the reply loop, `system` is the
- * platform talking about the channel rather than into it, and `unknown` is a
- * message the surface could not attribute to anybody — which is also what an
- * ingress carrying no actor at all is normalized to.
+ * grant. `human`, the same set the agent's `composio_tools.state.PERSONAL_KINDS`
+ * admits: `bot` is the reply loop, `system` is the platform talking about the
+ * channel rather than into it, and `unknown` is a message the surface could not
+ * attribute to anybody — which is also what an ingress carrying no actor at all
+ * is normalized to.
+ *
+ * The one addition is `app` from an account the operator listed in
+ * `OPENTAG_TRUSTED_APP_SENDERS`: a person's own account posting through an app
+ * they authorised, such as a Claude session. See `speaksForAPerson`. With the
+ * list empty, which is the default, this is `human` and nothing else, as
+ * before.
  *
  * Optional-chained like every other read of `actor` in this app. The Channel
  * normalizes one in, so this only ever fires for something that bypassed it —
  * and that should be refused, not turned into a `TypeError` where a decision
  * belongs.
  */
-function isFromAPerson(message: { actor?: ProviderActor }): boolean {
-  return message.actor?.kind === "human";
+function isFromAPerson(
+  message: { actor?: ProviderActor },
+  trustedAppSenders: ReadonlySet<string>,
+): boolean {
+  return speaksForAPerson(message.actor, trustedAppSenders);
 }
 
 /**
@@ -126,11 +138,18 @@ export function createOpenTagChannel(
   name: string,
   agent: ChannelAgent,
   agentDisplayName = DEFAULT_AGENT_DISPLAY_NAME,
-  options: { openbotPairing?: boolean } = {},
+  options: {
+    openbotPairing?: boolean;
+    /** `OPENTAG_TRUSTED_APP_SENDERS`; see `speaksForAPerson`. */
+    trustedAppSenders?: ReadonlySet<string>;
+  } = {},
 ): Channel {
+  const trustedAppSenders = options.trustedAppSenders ?? NO_TRUSTED_APP_SENDERS;
   // Only when paired: unpaired, the Channel keeps the stock `"platform"`
   // strategy and every other agent sees exactly the context it always did.
-  const turns = options.openbotPairing ? createTurnConversations() : undefined;
+  const turns = options.openbotPairing
+    ? createTurnConversations(undefined, trustedAppSenders)
+    : undefined;
   const decisions = createApprovalDecisions(() => {
     const store = channel.adapters.find(
       (adapter) => adapter.stateStore,
@@ -285,7 +304,8 @@ export function createOpenTagChannel(
   };
 
   channel.onMention(async ({ thread, message }) => {
-    if (!isFromAPerson(message) || !isAFreshAsk(message)) return;
+    if (!isFromAPerson(message, trustedAppSenders) || !isAFreshAsk(message))
+      return;
 
     const subscription = await readSubscription(thread);
     if (subscription === "following") {
@@ -338,7 +358,8 @@ export function createOpenTagChannel(
   });
 
   channel.onMessage(async ({ thread, message }) => {
-    if (!isFromAPerson(message) || !isAFreshAsk(message)) return;
+    if (!isFromAPerson(message, trustedAppSenders) || !isAFreshAsk(message))
+      return;
 
     const subscription = await readSubscription(thread);
     if (subscription === "following") {
