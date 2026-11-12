@@ -4,7 +4,7 @@
 # The rule is in standards.md: Ken is the sole author.
 #
 # Blocked: Co-Authored-By an AI tool, "Generated with/by <AI tool>", Claude-Session lines, Claude
-# session and product links, noreply@anthropic.com, and "Requested by" lines.
+# session and product links, noreply@anthropic.com (also as commit author), and "Requested by" lines.
 # Exit 2 refuses the tool call and hands the message on stderr back to the agent.
 
 payload=$(cat)
@@ -37,12 +37,16 @@ else
 fi
 
 # Before a push or a new pull request, check the commits that are not on any remote yet. This
-# catches a message that came from a file or an editor.
+# catches a message that came from a file or an editor, and a commit authored as an AI.
 if has 'git[[:space:]]([^;&|]*[[:space:]])?push|gh[[:space:]]+pr[[:space:]]+create|"tool_name"[[:space:]]*:[[:space:]]*"mcp__github__create_pull_request"'; then
   if git rev-parse --git-dir >/dev/null 2>&1; then
-    bad=$(git log HEAD --not --remotes --format='%h %s%n%b' 2>/dev/null |
+    bad=$(git log HEAD --not --remotes --format='%h author %an <%ae>, committer %cn <%ce>%n%s%n%b' 2>/dev/null |
       grep -Ei -e "$credit" -e "^$lead" | head -5)
-    [ -n "$bad" ] && { echo "$bad" >&2; refuse "an unpushed commit"; }
+    if [ -n "$bad" ]; then
+      echo "$bad" >&2
+      echo "If the author or committer is an AI, set git user.name and user.email to the person you work for and re-author the commit: GitHub turns other authors into Co-authored-by lines on a squash merge." >&2
+      refuse "an unpushed commit"
+    fi
   fi
 fi
 
