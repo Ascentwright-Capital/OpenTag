@@ -1,0 +1,16 @@
+# Fails a pull request whose title, description or commits credit an AI.
+# The check itself lives in Ascentwright-Capital/.github.
+name: AI credit
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+permissions: {}
+concurrency:
+  group: ai-credit-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  check:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: Ascentwright-Capital/.github/.github/workflows/ai-credit-check.yml@main

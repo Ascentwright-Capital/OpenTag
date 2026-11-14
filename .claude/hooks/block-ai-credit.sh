@@ -1,7 +1,8 @@
 #!/bin/sh
 # Claude Code PreToolUse hook: refuses a commit, pull request, issue or comment that credits an AI.
 # Copy to .claude/hooks/block-ai-credit.sh; templates/claude-settings.json wires it up.
-# The rule is in standards.md: Ken is the sole author.
+# The rule is in standards.md: Ken is the sole author. The patterns match the CI check in the .github
+# repository, .github/workflows/ai-credit-check.yml: change both together.
 #
 # Blocked: Co-Authored-By an AI tool, "Generated with/by <AI tool>", Claude-Session lines, Claude
 # session and product links, noreply@anthropic.com (also as commit author), and "Requested by" lines.
@@ -9,8 +10,11 @@
 
 payload=$(cat)
 
-ai='claude|anthropic|copilot|chatgpt|openai|codex|cursor|gemini|devin|aider'
-credit="co-authored-by:[^\"\\\\]*($ai)|(generated|written|authored|created|built|made) (with|by)[^\"\\\\]*($ai)|claude-session:|claude\\.ai/code/session|claude\\.com/claude-code|noreply@anthropic\\.com"
+ai='claude|anthropic|copilot|chatgpt|openai|codex|cursor (ai|agent)|cursoragent|gemini|devin ai|devin-ai|aider'
+# A name counts only as a whole word, so "CopilotKit" and a person called Devin pass.
+end='([^[:alnum:]]|$)'
+line='[^"\\\\]*'
+credit="co-authored-by:$line($ai)$end|(generated|written|authored|created|built|made) (with|by) ([[:alnum:]]+ )?[^[:alnum:]\"\\\\]*($ai)$end|claude-session:|claude\\.ai/code/session|claude\\.com/claude-code|noreply@anthropic\\.com"
 
 # The same patterns, anchored inside the JSON string fields that become commit or pull request text.
 field='"(command|title|body|message|commit_title|commit_message)"[[:space:]]*:[[:space:]]*"'
@@ -41,7 +45,7 @@ fi
 if has 'git[[:space:]]([^;&|]*[[:space:]])?push|gh[[:space:]]+pr[[:space:]]+create|"tool_name"[[:space:]]*:[[:space:]]*"mcp__github__create_pull_request"'; then
   if git rev-parse --git-dir >/dev/null 2>&1; then
     bad=$(git log HEAD --not --remotes --format='%h author %an <%ae>, committer %cn <%ce>%n%s%n%b' 2>/dev/null |
-      grep -Ei -e "$credit" -e "^$lead" | head -5)
+      grep -Ei -e "$credit" -e "^$lead" -e "^[0-9a-f]+ author .*($ai)$end" | head -5)
     if [ -n "$bad" ]; then
       echo "$bad" >&2
       echo "If the author or committer is an AI, set git user.name and user.email to the person you work for and re-author the commit: GitHub turns other authors into Co-authored-by lines on a squash merge." >&2
