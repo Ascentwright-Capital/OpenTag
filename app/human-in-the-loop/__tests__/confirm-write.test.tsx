@@ -220,6 +220,34 @@ describe("ConfirmWrite", () => {
     ]);
   });
 
+  it("shows a placeholder for an empty value, because Slack refuses an empty table cell", () => {
+    // OpenBot 1.0.2 sends an empty list argument, such as Linear's `label_ids: []`, as "".
+    const ir = renderToIR(
+      <ConfirmWrite
+        action="Create an issue in Linear"
+        fields={[
+          { label: "Title", value: "Fix the thing" },
+          { label: "Label IDs", value: "" },
+          { label: "Description", value: "  " },
+        ]}
+      />,
+    );
+    const { blocks } = renderSlackMessage(ir);
+
+    const table = blocks.find((b) => b.type === "table") as
+      | { rows: { type: string; text: string }[][] }
+      | undefined;
+    expect(table?.rows.map((row) => row.map((cell) => cell.text))).toEqual([
+      ["Title", "Fix the thing"],
+      ["Label IDs", "(empty)"],
+      ["Description", "(empty)"],
+    ]);
+    for (const cell of table?.rows.flat() ?? []) {
+      expect(cell.type).toBe("raw_text");
+      expect(cell.text.trim()).not.toBe("");
+    }
+  });
+
   it("prefers the fields table over a legacy detail string", () => {
     const ir = renderToIR(
       <ConfirmWrite
