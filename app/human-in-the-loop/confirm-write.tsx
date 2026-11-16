@@ -242,19 +242,31 @@ async function resumeOrShowFailure(
  * passed, so neither renderer emits a header row — "Field | Value" would spend a
  * row restating what the layout already says. Slack renders cells as `raw_text`,
  * so labels cannot be bolded here.
+ *
+ * Slack refuses a table with an empty cell (`invalid_blocks`), and then the
+ * thread shows no card at all. OpenBot sends an empty list argument, such as
+ * Linear's `label_ids: []`, as an empty string, so a blank cell gets a
+ * placeholder.
  */
 function fieldTable(fields: ConfirmWriteField[]) {
   return (
     <Table>
       {fields.map((field) => (
         <Row>
-          <Cell>{field.label}</Cell>
-          <Cell>{field.value}</Cell>
+          <Cell>{cellText(field.label)}</Cell>
+          <Cell>{cellText(field.value)}</Cell>
         </Row>
       ))}
     </Table>
   );
 }
+
+/** Text for one table cell: the text itself, or a placeholder when it is blank. */
+function cellText(text: string): string {
+  return text.trim() ? text : EMPTY_CELL;
+}
+
+const EMPTY_CELL = "(empty)";
 
 /**
  * Words whose presence makes an action irreversible. Matched against every word
