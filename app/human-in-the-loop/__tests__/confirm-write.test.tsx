@@ -149,6 +149,28 @@ describe("ConfirmWrite", () => {
     ]);
   });
 
+  it.each([
+    ["00-00 Factory Master wants to create linear issue on Linear", "Create"],
+    ["Your Bot wants to delete a page on Notion", "Delete"],
+    ["00-31 Digital Factory wants to cancel a subscription", "Confirm"],
+    ["Claude wants to", "Confirm"],
+  ])("takes the verb after \"wants to\" when a Bot is named first: %s", (action, label) => {
+    // OpenBot 1.0.2 sends "<Bot name> wants to <verb> ...". The leading word is
+    // then part of the Bot's name ("00-00"), not what the click does.
+    const ir = renderToIR(<ConfirmWrite action={action} />);
+    const { blocks } = renderSlackMessage(ir);
+
+    const actions = blocks.find((b) => b.type === "actions") as
+      | { elements: { text: { text: string } }[] }
+      | undefined;
+    expect(actions?.elements.map((e) => e.text.text)).toEqual([label, "Cancel"]);
+
+    const context = blocks.find((b) => b.type === "context") as
+      | { elements: { text: string }[] }
+      | undefined;
+    expect(context?.elements[0]?.text).toContain(`*${label}*`);
+  });
+
   it("does not label both buttons the same when the verb collides with Cancel", () => {
     const ir = renderToIR(<ConfirmWrite action="Cancel subscription" />);
     const { blocks } = renderSlackMessage(ir);
