@@ -325,9 +325,18 @@ function destructiveWordOf(action: string): string | undefined {
   return wordsOf(action).find((word) => DESTRUCTIVE.has(word));
 }
 
-/** The action's own leading verb, e.g. `Delete customer` -> `Delete`. */
+/**
+ * The action's own verb, e.g. `Delete customer` -> `Delete`.
+ *
+ * OpenBot names the Bot first: `00-00 Factory Master wants to create an issue`.
+ * The leading word is then part of the Bot's name, and a button that reads
+ * `00-00` says nothing about the click. So the verb is the word after
+ * `wants to` when the action has that phrase, and the leading word otherwise.
+ */
 function verbOf(action: string): string {
-  const word = action.trim().split(/\s+/)[0] ?? "";
+  const text = action.trim();
+  const named = /\swants to(?:\s+(\S+))?/i.exec(text);
+  const word = named ? (named[1] ?? "") : (text.split(/\s+/)[0] ?? "");
   if (!word) return "";
   return word[0]!.toUpperCase() + word.slice(1);
 }
