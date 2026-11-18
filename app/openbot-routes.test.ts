@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  CONVERSATION_PATH,
   createOpenbotRoutes,
   DELIVER_PATH,
   MEMBERSHIP_PATH,
@@ -10,14 +11,23 @@ import {
 
 const AUTH = "Bearer 0123456789abcdef0123456789abcdef";
 
-type SlackCall = { method: string; body: Record<string, unknown> };
+type SlackCall = {
+  method: string;
+  body: Record<string, unknown>;
+  contentType?: string;
+};
 
 function fakeSlack(answers: Array<Record<string, unknown> | number>) {
   const calls: SlackCall[] = [];
   const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    const contentType = new Headers(init?.headers).get("content-type") ?? "";
+    const form = contentType.startsWith("application/x-www-form-urlencoded");
     calls.push({
       method: String(url).replace("https://slack.com/api/", ""),
-      body: JSON.parse(String(init?.body)),
+      // Slack's read methods take a form, its write methods JSON.
+      ...(form
+        ? { body: Object.fromEntries(new URLSearchParams(String(init?.body))), contentType }
+        : { body: JSON.parse(String(init?.body)) }),
     });
     const answer = answers.shift() ?? { ok: true };
     if (typeof answer === "number") return new Response("", { status: answer });
@@ -196,5 +206,45 @@ describe("OpenBot routes", () => {
       channelId: "C0ABCDEFGH",
     });
     expect(await response.json()).toEqual({ member: false });
+  });
+
+  it("names a channel, asking Slack with a form", async () => {
+    const slack = fakeSlack([
+      { ok: true, channel: { id: "C0ABCDEFGH", name: "00-30-cto", is_channel: true } },
+    ]);
+    const call = await serve({ authHeader: AUTH, slackBotToken: "xoxb-1", fetchImpl: slack.fetchImpl });
+    const response = await call(CONVERSATION_PATH, { teamId: "T1", channelId: "C0ABCDEFGH" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ name: "00-30-cto" });
+    expect(slack.calls).toEqual([
+      {
+        method: "conversations.info",
+        body: { channel: "C0ABCDEFGH" },
+        contentType: "application/x-www-form-urlencoded; charset=utf-8",
+      },
+    ]);
+  });
+
+  it("gives a direct message no name", async () => {
+    const slack = fakeSlack([
+      { ok: true, channel: { id: "D0ABCDEFGH", is_im: true, user: "U012ABCDEF" } },
+      { ok: true, channel: { id: "D0ABCDEFGH", is_im: true, name: "U012ABCDEF" } },
+    ]);
+    const call = await serve({ authHeader: AUTH, slackBotToken: "xoxb-1", fetchImpl: slack.fetchImpl });
+    for (let asked = 0; asked < 2; asked += 1) {
+      const response = await call(CONVERSATION_PATH, { channelId: "D0ABCDEFGH" });
+      expect(await response.json()).toEqual({ name: null });
+    }
+  });
+
+  it("refuses a channel it cannot name, and one without the secret", async () => {
+    const slack = fakeSlack([{ ok: false, error: "channel_not_found" }]);
+    const call = await serve({ authHeader: AUTH, slackBotToken: "xoxb-1", fetchImpl: slack.fetchImpl });
+    const hidden = await call(CONVERSATION_PATH, { channelId: "G0ABCDEFGH" });
+    expect(hidden.status).toBe(422);
+    expect(await hidden.json()).toEqual({ error: "channel_not_found" });
+    expect((await call(CONVERSATION_PATH, { channelId: "#general" })).status).toBe(400);
+    expect((await call(CONVERSATION_PATH, { channelId: "C0ABCDEFGH" }, "Bearer wrong")).status).toBe(401);
+    expect(slack.calls).toHaveLength(1);
   });
 });

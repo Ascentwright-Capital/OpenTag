@@ -1,11 +1,12 @@
 /**
- * The two routes OpenBot calls on OpenTag when they are paired (`OPENBOT_PAIRING`).
+ * The routes OpenBot calls on OpenTag when they are paired (`OPENBOT_PAIRING`).
  *
  * A managed Channel can only post inside a live delivery, fenced to that turn's
  * recipient, so a message OpenBot sends on its own (a reply after an approval, a
  * Bot's question, a routine result) has no turn to ride on. These routes post it
  * with the workspace's own bot token instead (`SLACK_BOT_TOKEN`), and answer
- * OpenBot's channel-membership checks with the same token.
+ * OpenBot's questions about a channel (who is in it, what it is called) with
+ * the same token.
  *
  * The contract is OpenBot's `createOpenTagTransport`
  * (`server/src/delivery/opentag.ts`):
@@ -15,8 +16,12 @@
  *   OpenBot retries a 5xx and records anything else as failed.
  * - `POST /openbot/membership` `{ teamId, slackUserId, channelId }` answers
  *   `{ member: boolean }`. OpenBot fails closed on anything else.
+ * - `POST /openbot/conversation` `{ channelId }` answers `{ name }`: the
+ *   channel's name without the `#`, or `null` for a direct message. OpenBot
+ *   gives a thread started in a channel to the Bot that channel is named
+ *   after, and treats any other answer as a channel that is nobody's.
  *
- * Both require `Authorization` to equal `AGENT_AUTH_HEADER`, which is the same
+ * All require `Authorization` to equal `AGENT_AUTH_HEADER`, which is the same
  * `Bearer <secret>` OpenBot already checks on every turn. Without a secret the
  * routes stay shut: anybody who can reach this port could otherwise post as the
  * app.
@@ -27,6 +32,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 export const DELIVER_PATH = "/openbot/deliver";
 export const MEMBERSHIP_PATH = "/openbot/membership";
+export const CONVERSATION_PATH = "/openbot/conversation";
+const PATHS = new Set([DELIVER_PATH, MEMBERSHIP_PATH, CONVERSATION_PATH]);
 
 const MAX_BODY_BYTES = 256 * 1024;
 const SLACK_TIMEOUT_MS = 15_000;
@@ -111,6 +118,9 @@ export function createOpenbotRoutes(options: OpenbotRoutesOptions) {
   async function slack(
     method: string,
     body: Record<string, unknown>,
+    // Slack reads a JSON body on its write methods only; `conversations.info`
+    // takes its arguments as a form.
+    encoding: "json" | "form" = "json",
   ): Promise<SlackAnswer> {
     let response: Response;
     try {
@@ -118,9 +128,17 @@ export function createOpenbotRoutes(options: OpenbotRoutesOptions) {
         method: "POST",
         headers: {
           Authorization: `Bearer ${options.slackBotToken}`,
-          "Content-Type": "application/json; charset=utf-8",
+          "Content-Type":
+            encoding === "form"
+              ? "application/x-www-form-urlencoded; charset=utf-8"
+              : "application/json; charset=utf-8",
         },
-        body: JSON.stringify(body),
+        body:
+          encoding === "form"
+            ? new URLSearchParams(
+                Object.entries(body).map(([key, value]) => [key, String(value)]),
+              ).toString()
+            : JSON.stringify(body),
         signal: AbortSignal.timeout(SLACK_TIMEOUT_MS),
       });
     } catch {
@@ -276,6 +294,31 @@ export function createOpenbotRoutes(options: OpenbotRoutesOptions) {
     return send(response, 200, { member: false });
   }
 
+  /**
+   * What a channel is called (`channels:read`, and `groups:read` for a private
+   * one the app is in). A direct message has no name.
+   */
+  async function conversation(payload: unknown, response: ServerResponse) {
+    if (!isRecord(payload) || !isSlackId(payload.channelId))
+      return send(response, 400, { error: "invalid_request" });
+    let answer: SlackAnswer;
+    try {
+      answer = await slack(
+        "conversations.info",
+        { channel: payload.channelId },
+        "form",
+      );
+    } catch (error) {
+      return failed(error, response);
+    }
+    const channel = isRecord(answer.channel) ? answer.channel : {};
+    const name =
+      channel.is_im !== true && boundedString(channel.name, 255)
+        ? channel.name
+        : null;
+    return send(response, 200, { name });
+  }
+
   function failed(error: unknown, response: ServerResponse) {
     if (error instanceof SlackCallError) {
       console.warn(`[opentag] Slack refused an OpenBot request: ${error.code}`);
@@ -285,13 +328,13 @@ export function createOpenbotRoutes(options: OpenbotRoutesOptions) {
     return send(response, 500, { error: "internal_error" });
   }
 
-  /** Handles the two routes; anything else is left for the next listener. */
+  /** Handles OpenBot's routes; anything else is left for the next listener. */
   return async function handleOpenbotRequest(
     request: IncomingMessage,
     response: ServerResponse,
   ): Promise<boolean> {
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
-    if (path !== DELIVER_PATH && path !== MEMBERSHIP_PATH) return false;
+    if (!PATHS.has(path)) return false;
     if (request.method !== "POST") {
       response.setHeader("Allow", "POST");
       send(response, 405, { error: "method_not_allowed" });
@@ -318,7 +361,8 @@ export function createOpenbotRoutes(options: OpenbotRoutesOptions) {
       return true;
     }
     if (path === DELIVER_PATH) await deliver(payload, response);
-    else await membership(payload, response);
+    else if (path === MEMBERSHIP_PATH) await membership(payload, response);
+    else await conversation(payload, response);
     return true;
   };
 }
