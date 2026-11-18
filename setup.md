@@ -339,15 +339,21 @@ shows a one-time `link <code>` message to send to this app in a direct message.
 
 A managed Channel can only post inside a live delivery, so what OpenBot sends
 on its own (a reply after an approval, a Bot's question, a routine result, any
-answer it keeps out of a shared conversation) goes through two routes on this
-runtime, which post with the Slack app's own bot token:
+answer it keeps out of a shared conversation) goes through routes on this
+runtime, which post with the Slack app's own bot token. OpenBot's questions
+about a channel are answered with the same token:
 
 | Route | Body | Answer |
 | --- | --- | --- |
 | `POST /openbot/deliver` | `{ id, platform, address, text, sender? }` | `{ ok: true, id: <ts>, channel }` |
 | `POST /openbot/membership` | `{ teamId, slackUserId, channelId }` | `{ member: boolean }` |
+| `POST /openbot/conversation` | `{ channelId }` | `{ name }`: the channel's name without the `#`, `null` for a direct message |
 
-Both require `Authorization` to equal `AGENT_AUTH_HEADER`, and stay shut
+OpenBot uses the name to hand a thread to the Bot its channel is named after:
+with a channel `#00-30-cto` and a Bot whose OpenBot conversation is called
+`00-30-cto`, a thread started in that channel is answered by that Bot.
+
+All require `Authorization` to equal `AGENT_AUTH_HEADER`, and stay shut
 without one. Set OpenBot's `OPENTAG_URL` to this runtime's address, and give the
 runtime the token:
 
@@ -359,7 +365,7 @@ It is the **Bot User OAuth Token** on the Slack app's **OAuth & Permissions**
 page. The app needs `chat:write` to post, `im:write` to open the person's direct
 message with the app, `chat:write.customize` to post under
 each Bot's own name (without it, messages go out under the app's name), and
-`channels:read` plus `groups:read` for membership checks. Add any missing
+`channels:read` plus `groups:read` for membership checks and channel names. Add any missing
 scope there and reinstall the app. A delivery OpenBot retries under the same
 `id` is answered from memory for a day rather than posted twice. Teams is not
 supported by these routes yet.
