@@ -164,7 +164,6 @@ export class OpenTagStack extends cdk.Stack {
       "wss://realtime.intelligence.copilotkit.ai",
     );
     const logLevel = contextString(this, "logLevel", "warn");
-    const mermaidUrl = contextString(this, "mermaidUrl", "");
     const openAiModel = contextString(this, "openAiModel", "gpt-5.5");
     const openAiReasoningEffort = contextString(
       this,
@@ -457,7 +456,6 @@ export class OpenTagStack extends cdk.Stack {
         INTELLIGENCE_CHANNEL_NAME: channelName,
         INTELLIGENCE_GATEWAY_WS_URL: intelligenceGatewayWsUrl,
         LOG_LEVEL: logLevel,
-        ...optionalEnvironment("MERMAID_URL", mermaidUrl),
         PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright",
         PORT: "3000",
         // Where a browser reaches the runtime, for per-person Arcade only. The

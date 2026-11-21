@@ -1,8 +1,11 @@
 /**
  * Render Mermaid diagram source to a PNG, locally, in headless Chromium.
- * Mermaid is loaded from a CDN into our own browser; the diagram source
- * never leaves the host. Invalid Mermaid throws with the parser message so
- * the tool can hand the agent a clear error to repair.
+ * Mermaid's browser bundle comes from the installed `mermaid` package: the
+ * exact version pinned in package.json, checked against the lockfile's
+ * integrity hash at install. No script is fetched at render time, so the code
+ * that receives the diagram source changes only when that pin does, and the
+ * source never leaves the host. Invalid Mermaid throws with the parser message
+ * so the tool can hand the agent a clear error to repair.
  *
  * Two-stage to keep AI-authored content from executing scripts:
  *   1. A "render" page loads Mermaid and turns the DSL into a sanitized SVG
@@ -11,11 +14,21 @@
  *   2. A "shot" page displays that SVG with a `script-src 'none'` CSP, so
  *      even a crafted SVG can't run a script, then we screenshot it.
  */
+import { createRequire } from "node:module";
 import { getBrowser } from "./browser.js";
 
-const MERMAID_CDN =
-  process.env["MERMAID_URL"] ??
-  "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
+/**
+ * The Mermaid browser bundle on disk. Resolved when this module loads, so an
+ * install that is missing it fails at startup rather than on the first
+ * diagram, where the tool would misreport it as a syntax error.
+ *
+ * There is deliberately no URL override. The old `MERMAID_URL` let any address
+ * supply the code that receives the diagram source; to change Mermaid, change
+ * its pin in package.json.
+ */
+export const MERMAID_BUNDLE_PATH = createRequire(import.meta.url).resolve(
+  "mermaid/dist/mermaid.min.js",
+);
 
 export async function renderDiagram(code: string): Promise<Buffer> {
   const browser = await getBrowser();
@@ -31,10 +44,10 @@ export async function renderDiagram(code: string): Promise<Buffer> {
         `<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">` +
         `</head><body></body></html>`,
     );
-    await renderPage.addScriptTag({ url: MERMAID_CDN });
+    await renderPage.addScriptTag({ path: MERMAID_BUNDLE_PATH });
     const result = await renderPage.evaluate(async (code) => {
       await document.fonts.ready;
-      // @ts-expect-error mermaid is injected by the CDN script
+      // @ts-expect-error mermaid is defined by the injected bundle
       mermaid.initialize({
         startOnLoad: false,
         securityLevel: "strict",

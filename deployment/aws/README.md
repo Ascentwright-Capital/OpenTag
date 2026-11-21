@@ -174,7 +174,6 @@ These CDK context values become container environment variables:
 | `intelligenceApiUrl` | `INTELLIGENCE_API_URL` | CopilotKit hosted API |
 | `intelligenceGatewayWsUrl` | `INTELLIGENCE_GATEWAY_WS_URL` | CopilotKit hosted realtime gateway |
 | `logLevel` | `LOG_LEVEL` | `warn` |
-| `mermaidUrl` | `MERMAID_URL` | Built-in jsDelivr URL |
 | `openAiModel` | `OPENAI_MODEL` | `gpt-5.5` |
 | `openAiReasoningEffort` | `OPENAI_REASONING_EFFORT` | `low` |
 | `openAiVerbosity` | `OPENAI_VERBOSITY` | `low` |
