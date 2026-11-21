@@ -424,13 +424,22 @@ test("carries the configured channel name to both containers", () => {
   );
 });
 
+test("gives the runtime no Mermaid URL, even when one is in context", () => {
+  // The runtime image carries the pinned Mermaid bundle and reads no URL for
+  // it, so a `mermaidUrl` left in an older deploy's context is dropped.
+  const template = Template.fromStack(
+    stackWithContext({ mermaidUrl: "https://cdn.example.test/mermaid.js" }),
+  );
+
+  assert.equal(environmentValues(template, "runtime").MERMAID_URL, undefined);
+});
+
 test("allows supported non-secret environment overrides through context", () => {
   const template = Template.fromStack(
     stackWithContext({
       intelligenceApiUrl: "https://intelligence.example.test",
       agentDisplayName: "Kite",
       logLevel: "debug",
-      mermaidUrl: "https://cdn.example.test/mermaid.js",
       daytonaSnapshot: "snap-test",
       daytonaTtlMinutes: "45",
       githubAppId: "12345",
@@ -475,10 +484,6 @@ test("allows supported non-secret environment overrides through context", () => 
             Value: "https://intelligence.example.test",
           },
           { Name: "LOG_LEVEL", Value: "debug" },
-          {
-            Name: "MERMAID_URL",
-            Value: "https://cdn.example.test/mermaid.js",
-          },
         ]),
         Name: "runtime",
       }),

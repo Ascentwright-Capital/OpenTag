@@ -161,7 +161,6 @@ The AG-UI endpoint is `http://localhost:8123/`; `/health` reports the
 | `PUBLIC_URL` | For personal Arcade only | Where a browser can reach this service. Falls back to `RAILWAY_PUBLIC_DOMAIN`. Composio deployments and shared-only Arcade need none |
 | `PORT` | No | Channel HTTP port; defaults to `3000` |
 | `LOG_LEVEL` | No | Defaults to `error`. Channel lifecycle breadcrumbs are emitted at `warn`, so set `warn` or lower to see them |
-| `MERMAID_URL` | No | Overrides the Mermaid browser bundle URL used by diagram rendering |
 
 The API key selects a project; the Channel name selects a Channel inside it.
 When `INTELLIGENCE_LEARNING_CONTAINER_ID` is set, it must name an existing
@@ -176,6 +175,11 @@ in `.env`. That is deliberate, and it is why `copilotkit channels status`
 reports them as unset. A genuinely missing `INTELLIGENCE_GATEWAY_WS_URL` does
 not error: the realtime plane is a different host from the API plane and is not
 derived from it, so `channels.ready()` simply hangs until it times out.
+
+Diagrams are drawn with the Mermaid bundle from the `mermaid` package, at the
+exact version pinned in `package.json`; nothing is fetched from a CDN. There is
+no setting to load it from elsewhere, and `MERMAID_URL` is no longer read. To
+change Mermaid, change the pin.
 
 Start the runtime:
 

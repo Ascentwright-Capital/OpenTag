@@ -1,9 +1,10 @@
 /**
  * A single shared headless Chromium for local diagram rendering.
  *
- * The rendering happens entirely in-process (our own browser) — only the
- * Mermaid is fetched from a CDN; the user's diagram source never leaves the
- * host. Reuse one browser across renders so we don't pay a launch per call;
+ * The rendering happens entirely in-process (our own browser), and Mermaid is
+ * loaded from the installed package rather than a CDN (see `diagram.ts`); the
+ * user's diagram source never leaves the host. Reuse one browser across
+ * renders so we don't pay a launch per call;
  * `closeBrowser()` is wired into the bridge's shutdown.
  *
  * Requires a Chromium binary: `npx playwright install chromium`.
