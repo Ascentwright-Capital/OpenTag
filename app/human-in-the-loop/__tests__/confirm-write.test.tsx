@@ -220,6 +220,32 @@ describe("ConfirmWrite", () => {
     ]);
   });
 
+  it("shows the agent's shortened notice in full, as the last row", () => {
+    // The shape `summarize_args` sends when it cuts a value and leaves a field
+    // off. The notice is the only place the approver learns that approving
+    // runs more than the card shows, so neither surface may drop or clip it.
+    const cut = `${"A".repeat(300)}… (12 more characters not shown)`;
+    const notice =
+      "1 more field not shown: Bcc. Cut short: Body. " +
+      "Approving runs the full version, not only what is shown here.";
+    const fields = [
+      { label: "Recipient email", value: "bob@example.test" },
+      { label: "Body", value: cut },
+      { label: "⚠️ Shortened", value: notice },
+    ];
+    const ir = renderToIR(<ConfirmWrite action="Send email" fields={fields} />);
+
+    const table = renderSlackMessage(ir).blocks.find(
+      (b) => b.type === "table",
+    ) as { rows: { text: string }[][] } | undefined;
+    expect(table?.rows.map((row) => row.map((cell) => cell.text))).toEqual([
+      ["Recipient email", "bob@example.test"],
+      ["Body", cut],
+      ["⚠️ Shortened", notice],
+    ]);
+    expect(JSON.stringify(renderAdaptiveCard(ir))).toContain(notice);
+  });
+
   it("prefers the fields table over a legacy detail string", () => {
     const ir = renderToIR(
       <ConfirmWrite

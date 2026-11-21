@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
@@ -5,7 +7,10 @@ const mocks = vi.hoisted(() => {
   const screenshot = vi.fn(async () => png);
   const renderPage = {
     setContent: vi.fn(async (_html: string) => undefined),
-    addScriptTag: vi.fn(async (_options: { url: string }) => undefined),
+    addScriptTag: vi.fn(
+      async (_options: { url?: string; path?: string; content?: string }) =>
+        undefined,
+    ),
     evaluate: vi.fn(async (_callback: unknown, _code: string) => ({
       svg: "<svg><text>Flow</text></svg>",
     })),
@@ -33,7 +38,15 @@ vi.mock("./browser.js", () => ({
   getBrowser: vi.fn(async () => mocks.browser),
 }));
 
-const { renderDiagram } = await import("./diagram.js");
+// Set while the module loads, because the old override was read at import
+// time: the tests below would not notice it coming back otherwise.
+process.env["MERMAID_URL"] = "https://cdn.example.test/mermaid.min.js";
+const { MERMAID_BUNDLE_PATH, renderDiagram } = await import("./diagram.js");
+delete process.env["MERMAID_URL"];
+
+const packageJson = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+) as { dependencies: Record<string, string> };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -66,5 +79,47 @@ describe("renderDiagram visual treatment", () => {
     expect(shotHtml).toContain('font-family:"Plus Jakarta Sans"');
     expect(shotHtml).toContain("filter:blur(103px)");
     expect(mocks.shotPage.$).toHaveBeenCalledWith("#frame");
+  });
+});
+
+describe("renderDiagram Mermaid source", () => {
+  it("injects the installed bundle from disk, never a URL", async () => {
+    await renderDiagram("flowchart LR\n A --> B");
+
+    expect(mocks.renderPage.addScriptTag).toHaveBeenCalledTimes(1);
+    expect(mocks.renderPage.addScriptTag).toHaveBeenCalledWith({
+      path: MERMAID_BUNDLE_PATH,
+    });
+    const html = mocks.renderPage.setContent.mock.calls[0]?.[0] as string;
+    expect(html).not.toMatch(/<script/i);
+  });
+
+  it("ignores a MERMAID_URL set in the environment", async () => {
+    process.env["MERMAID_URL"] = "https://cdn.example.test/mermaid.min.js";
+    try {
+      await renderDiagram("flowchart LR\n A --> B");
+    } finally {
+      delete process.env["MERMAID_URL"];
+    }
+
+    const [options] = mocks.renderPage.addScriptTag.mock.calls[0] ?? [];
+    expect(options).toEqual({ path: MERMAID_BUNDLE_PATH });
+    expect(JSON.stringify(options)).not.toContain("cdn.example.test");
+  });
+
+  it("resolves to the exact Mermaid release pinned in package.json", () => {
+    const pinned = packageJson.dependencies["mermaid"];
+    // An exact version, not a range: a range is what let a new publish change
+    // the code the renderer runs without a lockfile change.
+    expect(pinned).toMatch(/^\d+\.\d+\.\d+$/);
+
+    expect(MERMAID_BUNDLE_PATH).toMatch(/[\\/]dist[\\/]mermaid\.min\.js$/);
+    expect(existsSync(MERMAID_BUNDLE_PATH)).toBe(true);
+    const manifest = join(dirname(MERMAID_BUNDLE_PATH), "..", "package.json");
+    const installed = JSON.parse(readFileSync(manifest, "utf8")) as {
+      name: string;
+      version: string;
+    };
+    expect(installed).toMatchObject({ name: "mermaid", version: pinned });
   });
 });

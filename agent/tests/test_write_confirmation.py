@@ -12,7 +12,7 @@ from langchain_mcp_adapters.interceptors import MCPToolCallRequest
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from mcp.types import CallToolResult, TextContent
-from write_confirmation import failure_text, summarize_args
+from write_confirmation import SHORTENED_LABEL, failure_text, summarize_args
 
 
 def approve_and_track(monkeypatch, thread="thread-1"):
@@ -104,18 +104,112 @@ def test_summarize_args_joins_lists_and_compacts_nested_values():
     }
 
 
-def test_summarize_args_truncates_an_overlong_value():
-    fields = summarize_args({"description": "x" * 400})
-
-    assert len(fields) == 1
-    assert fields[0]["value"] == "x" * 300 + "…"
+APPROVING_RUNS_IT_ALL = (
+    "Approving runs the full version, not only what is shown here."
+)
 
 
-def test_summarize_args_caps_rows_and_notes_the_overflow():
-    fields = summarize_args({f"field{i}": f"value{i}" for i in range(15)})
+def test_summarize_args_adds_no_notice_when_nothing_is_left_out():
+    args = {f"field{i}": f"value{i}" for i in range(11)}
+    args["body"] = "x" * 300  # At the limit, not over it.
+
+    fields = summarize_args(args)
+
+    assert len(fields) == 12
+    assert fields[-1] == {"label": "Body", "value": "x" * 300}
+    assert all(field["label"] != SHORTENED_LABEL for field in fields)
+    assert not any("not shown" in field["value"] for field in fields)
+
+
+def test_summarize_args_counts_a_single_cut_character_plainly():
+    fields = summarize_args({"body": "x" * 301})
+
+    assert fields[0]["value"] == "x" * 300 + "… (1 more character not shown)"
+
+
+def test_summarize_args_says_how_much_of_a_long_value_is_cut():
+    fields = summarize_args(
+        {
+            "recipient_email": "bob@example.test",
+            "body": "A" * 300 + " MARKER-TAIL",
+        }
+    )
+
+    assert fields == [
+        {"label": "Recipient email", "value": "bob@example.test"},
+        {
+            "label": "Body",
+            "value": "A" * 300 + "… (12 more characters not shown)",
+        },
+        {
+            "label": SHORTENED_LABEL,
+            "value": f"Cut short: Body. {APPROVING_RUNS_IT_ALL}",
+        },
+    ]
+
+
+def test_summarize_args_names_the_fields_past_the_row_cap():
+    args = {f"f{i:02d}": "v" for i in range(12)}
+    args["bcc"] = "x@example.test"
+
+    fields = summarize_args(args)
 
     assert len(fields) == 13
-    assert fields[12] == {"label": "…", "value": "3 more fields"}
+    assert [field["label"] for field in fields[:12]] == [
+        f"F{i:02d}" for i in range(12)
+    ]
+    assert fields[12] == {
+        "label": SHORTENED_LABEL,
+        "value": f"1 more field not shown: Bcc. {APPROVING_RUNS_IT_ALL}",
+    }
+    assert "x@example.test" not in str(fields)
+
+
+def test_summarize_args_names_five_hidden_fields_and_counts_the_rest():
+    args = {f"field{i}": f"value{i}" for i in range(12)}
+    args.update(
+        {
+            "cc": "a@example.test",
+            "bcc": "b@example.test",
+            "reply_to": "c@example.test",
+            "attachments": ["report.pdf"],
+            "headers": {"X-Priority": "1"},
+            "signature": "Bob",
+            "send_at": "2026-12-01",
+        }
+    )
+
+    fields = summarize_args(args)
+
+    assert len(fields) == 13
+    assert fields[12]["value"] == (
+        "7 more fields not shown: Cc, Bcc, Reply to, Attachments, Headers, "
+        f"and 2 more. {APPROVING_RUNS_IT_ALL}"
+    )
+
+
+def test_summarize_args_reports_hidden_fields_and_cut_values_together():
+    args = {"description": "x" * 400}
+    args.update({f"field{i}": f"value{i}" for i in range(11)})
+    # Past the cap, so it is named as not shown rather than as cut short.
+    args["notes"] = "y" * 400
+    args["a_very_long_field_name_that_goes_on_and_on_and_on"] = "z"
+
+    fields = summarize_args(args)
+
+    assert len(fields) == 13
+    assert fields[0] == {
+        "label": "Description",
+        "value": "x" * 300 + "… (100 more characters not shown)",
+    }
+    assert fields[12] == {
+        "label": SHORTENED_LABEL,
+        "value": (
+            "2 more fields not shown: Notes, "
+            "A very long field name that goes on and…. "
+            f"Cut short: Description. {APPROVING_RUNS_IT_ALL}"
+        ),
+    }
 
 
 def test_summarize_args_renders_booleans_as_yes_and_no():
@@ -164,6 +258,40 @@ def test_write_confirmation_emits_the_copilotkit_interrupt_envelope(monkeypatch)
             "effect": "destructive",
         },
     }
+
+
+def test_a_shortened_card_says_so_while_the_write_gets_every_argument(
+    monkeypatch,
+):
+    cards = approve_and_track(monkeypatch)
+    handled = []
+
+    async def handler(request):
+        handled.append(request.args)
+        return CallToolResult(content=[TextContent(type="text", text="ok")])
+
+    args = {f"f{i:02d}": "v" for i in range(12)}
+    args["bcc"] = "x@example.test"
+    args["f00"] = "A" * 300 + " MARKER-TAIL"
+
+    asyncio.run(
+        write_confirmation.WriteConfirmationInterceptor()(
+            MCPToolCallRequest(name="send_email", args=args, server_name="mail"),
+            handler,
+        )
+    )
+
+    fields = cards[0]["fields"]
+    assert fields[-1] == {
+        "label": SHORTENED_LABEL,
+        "value": (
+            "1 more field not shown: Bcc. Cut short: F00. "
+            "Approving runs the full version, not only what is shown here."
+        ),
+    }
+    assert "MARKER-TAIL" not in str(fields)
+    # What the card warns about is exactly what still runs.
+    assert handled == [args]
 
 
 def test_write_confirmation_interceptor_leaves_annotated_reads_unguarded(
