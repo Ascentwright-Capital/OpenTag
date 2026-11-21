@@ -29,11 +29,19 @@ from langchain_mcp_adapters.interceptors import (
 from mcp.types import CallToolResult, TextContent
 
 
-# Max rows rendered in the confirmation table; the rest are counted in a note.
+# Max rows rendered in the confirmation table; the rest are named in a notice.
 _MAX_FIELDS = 12
 
 # Longest value rendered in a cell before it is elided.
 _MAX_VALUE = 300
+
+# How many field names the shortened notice lists before it only counts, and
+# how long each name may be. Keys come from the model, so neither is unbounded.
+_MAX_NAMED = 5
+_MAX_NAME = 40
+
+# Label of the row that says the card is not showing everything.
+SHORTENED_LABEL = "⚠️ Shortened"
 
 # Longest failure text carried into the thread and onto the next card.
 _MAX_ERROR = 240
@@ -99,6 +107,36 @@ def _stringify(value) -> str:
     return str(value)
 
 
+def _name_list(labels: list[str]) -> str:
+    """`Bcc, Cc, Reply to`, at most `_MAX_NAMED` names, the rest counted."""
+    names = [
+        label if len(label) <= _MAX_NAME else label[:_MAX_NAME].rstrip() + "…"
+        for label in labels[:_MAX_NAMED]
+    ]
+    extra = len(labels) - len(names)
+    if extra:
+        names.append(f"and {extra} more")
+    return ", ".join(names)
+
+
+def _shortened_notice(hidden: list[str], cut: list[str]) -> str | None:
+    """What the card leaves out, or `None` when it shows everything."""
+    parts = []
+    if hidden:
+        noun = "field" if len(hidden) == 1 else "fields"
+        parts.append(
+            f"{len(hidden)} more {noun} not shown: {_name_list(hidden)}."
+        )
+    if cut:
+        parts.append(f"Cut short: {_name_list(cut)}.")
+    if not parts:
+        return None
+    parts.append(
+        "Approving runs the full version, not only what is shown here."
+    )
+    return " ".join(parts)
+
+
 def summarize_args(args: dict) -> list[dict]:
     """Render mutating-tool args as approver-readable `{label, value}` rows.
 
@@ -106,20 +144,32 @@ def summarize_args(args: dict) -> list[dict]:
     buried among defaults, and the row count is capped so Slack doesn't collapse
     the card behind "Show more" — an approver who can't read the payload can't
     meaningfully approve it.
+
+    Approving runs the full arguments, not these rows. So a cut value says how
+    many characters are missing, and a last `SHORTENED_LABEL` row names the
+    fields left off and the values cut. Without it, the ellipsis on any long
+    email body, or a bare "3 more fields", passed for the whole payload.
     """
-    fields = []
+    rows = []
     for key, value in args.items():
         if _is_empty(value):
             continue
         text = _stringify(value)
-        if len(text) > _MAX_VALUE:
-            text = text[:_MAX_VALUE] + "…"
-        fields.append({"label": _humanize(key), "value": text})
+        was_cut = len(text) > _MAX_VALUE
+        if was_cut:
+            missing = len(text) - _MAX_VALUE
+            noun = "character" if missing == 1 else "characters"
+            text = f"{text[:_MAX_VALUE]}… ({missing:,} more {noun} not shown)"
+        rows.append(({"label": _humanize(key), "value": text}, was_cut))
 
-    if len(fields) > _MAX_FIELDS:
-        hidden = len(fields) - _MAX_FIELDS
-        fields = fields[:_MAX_FIELDS]
-        fields.append({"label": "…", "value": f"{hidden} more fields"})
+    shown, left_off = rows[:_MAX_FIELDS], rows[_MAX_FIELDS:]
+    fields = [field for field, _ in shown]
+    notice = _shortened_notice(
+        hidden=[field["label"] for field, _ in left_off],
+        cut=[field["label"] for field, was_cut in shown if was_cut],
+    )
+    if notice is not None:
+        fields.append({"label": SHORTENED_LABEL, "value": notice})
 
     return fields
 

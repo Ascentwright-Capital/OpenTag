@@ -99,7 +99,9 @@ interface ConfirmWriteProps {
   /**
    * The write's arguments as approver-readable rows, rendered as a table. The
    * agent decides which fields are worth showing (see `summarize_args`); this
-   * component only decides how they look.
+   * component only decides how they look. When the agent shortens them, its
+   * last row ("⚠️ Shortened") names what is left out, so every row has to be
+   * shown, in order.
    */
   fields?: ConfirmWriteField[];
   /**
