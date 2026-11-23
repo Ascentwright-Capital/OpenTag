@@ -1,0 +1,21 @@
+# Fails a pull request whose description does not show the change working: screenshots and a demo
+# video, or for a change with nothing to see, the commands run and their output.
+# The check itself lives in Ascentwright-Capital/.github. The rule is in agent-harness standards.md.
+name: PR evidence
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+permissions: {}
+concurrency:
+  group: pr-evidence-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  check:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: Ascentwright-Capital/.github/.github/workflows/pr-evidence-check.yml@main
+    with:
+      # The files people see: the channel messages, cards and modals.
+      # A change to them cannot claim "No visible surface".
+      ui-paths: '^app/'
